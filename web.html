@@ -84,6 +84,9 @@
             <div class="bg-orange-100 text-orange-800 p-3 rounded-lg mb-4 text-sm font-bold">
                 💡 僅顯示尚未取餐的訂單，點擊大按鈕完成取餐。
             </div>
+            <div class="mb-4">
+                <input type="text" id="pickupSearch" oninput="renderPickup()" placeholder="搜尋姓名或電話..." class="w-full p-4 rounded-xl border-2 border-gray-200 focus:border-orange-500 outline-none shadow-sm">
+            </div>
             <div id="pickup-list" class="space-y-4">
                 <!-- 取餐卡片由 JS 生成 -->
             </div>
@@ -228,8 +231,8 @@
                 });
 
                 const totalPrepared = bookedQty;
-                const available = totalPrepared - (parseInt(product.reserved) || 0);
-                const remaining = available - pickedQty;
+                const reserved = parseInt(product.reserved) || 0;
+                const remaining = totalPrepared + reserved - pickedQty;
 
                 // 顏色邏輯
                 let colorClass = "text-green-600 bg-green-50";
@@ -323,9 +326,13 @@
         // --- 取餐模式 ---
         function renderPickup() {
             const list = document.getElementById('pickup-list');
+            const search = document.getElementById('pickupSearch')?.value.toLowerCase() || '';
             list.innerHTML = '';
 
-            const pending = state.orders.filter(o => !o.isPickedUp);
+            const pending = state.orders.filter(o => !o.isPickedUp && (
+                o.customerName.toLowerCase().includes(search) || 
+                o.phone.includes(search)
+            ));
             if(pending.length === 0) {
                 list.innerHTML = '<div class="text-center py-20 text-gray-400 font-bold">目前沒有待取餐訂單</div>';
                 return;
@@ -399,7 +406,7 @@
                         <span class="font-bold">${p.name} ($${p.price})</span>
                         <div class="flex items-center gap-3">
                             <button onclick="updateFormQty('${p.id}', -1)" class="w-8 h-8 bg-white rounded-full shadow-sm text-gray-500 font-bold">-</button>
-                            <span id="qty-${p.id}" class="w-6 text-center font-black">0</span>
+                            <input type="number" id="qty-${p.id}" value="0" min="0" onchange="calcFormTotal()" class="w-12 px-2 text-center font-black border border-gray-200 rounded outline-none focus:ring-2 ring-red-500">
                             <button onclick="updateFormQty('${p.id}', 1)" class="w-8 h-8 bg-white rounded-full shadow-sm text-red-500 font-bold">+</button>
                         </div>
                     </div>
@@ -421,7 +428,7 @@
                 document.getElementById('form-note').value = order.note;
                 order.items.forEach(item => {
                     const qtyEl = document.getElementById(`qty-${item.productId}`);
-                    if(qtyEl) qtyEl.innerText = item.qty;
+                    if(qtyEl) qtyEl.value = item.qty;
                     const addonEl = document.getElementById(`addon-${item.productId}`);
                     if(addonEl) addonEl.checked = item.withAddon;
                 });
@@ -440,16 +447,16 @@
 
         function updateFormQty(pId, change) {
             const el = document.getElementById(`qty-${pId}`);
-            let val = parseInt(el.innerText) + change;
+            let val = parseInt(el.value) + change;
             if(val < 0) val = 0;
-            el.innerText = val;
+            el.value = val;
             calcFormTotal();
         }
 
         function calcFormTotal() {
             let total = 0;
             state.products.forEach(p => {
-                const qty = parseInt(document.getElementById(`qty-${p.id}`).innerText);
+                const qty = parseInt(document.getElementById(`qty-${p.id}`).value);
                 if (qty > 0) {
                     total += qty * p.price;
                     const addonEl = document.getElementById(`addon-${p.id}`);
@@ -468,7 +475,7 @@
 
             const items = [];
             state.products.forEach(p => {
-                const qty = parseInt(document.getElementById(`qty-${p.id}`).innerText);
+                const qty = parseInt(document.getElementById(`qty-${p.id}`).value);
                 if (qty > 0) {
                     items.push({
                         productId: p.id,
@@ -507,6 +514,10 @@
             return state.products.find(p => p.id === id)?.name || '未知商品';
         }
 
+        function editOrder(orderId) {
+            openOrderModal(orderId);
+        }
+
         function togglePickup(id) {
             const idx = state.orders.findIndex(o => o.id === id);
             state.orders[idx].isPickedUp = !state.orders[idx].isPickedUp;
@@ -540,7 +551,7 @@
                         }
                     });
                 });
-                const remaining = bookedQty - (product.reserved) - pickedQty;
+                const remaining = bookedQty + product.reserved - pickedQty;
                 csv += `${product.name},${bookedQty},${product.reserved},${pickedQty},${remaining}\n`;
             });
 
