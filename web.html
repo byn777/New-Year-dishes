@@ -243,6 +243,9 @@
             editingOrderId: null
         };
 
+        // 臨時保存訂單表單數據
+        let tempOrderData = null;
+
         function saveData() {
             localStorage.setItem('fry_products', JSON.stringify(state.products));
             localStorage.setItem('fry_orders', JSON.stringify(state.orders));
@@ -501,7 +504,7 @@
             if (!name || price <= 0) return alert('請填寫正確的商品名稱和價格');
             if (hasAddon && (!addonName || addonPrice <= 0)) return alert('加購項目資訊不完整');
 
-            const isFromOrder = document.getElementById('orderModal').classList.contains('hidden') === false || state.editingOrderId !== null;
+            const isFromOrder = tempOrderData !== null;
 
             if (editingProductId) {
                 const idx = state.products.findIndex(p => p.id === editingProductId);
@@ -548,6 +551,26 @@
         }
 
         function openProductModalFromOrder() {
+            // 保存當前訂單表單數據
+            tempOrderData = {
+                name: document.getElementById('form-name').value,
+                phone: document.getElementById('form-phone').value,
+                note: document.getElementById('form-note').value,
+                items: {}
+            };
+            
+            // 保存每個商品的數量和加購狀態
+            state.products.forEach(p => {
+                const qtyEl = document.getElementById(`qty-${p.id}`);
+                const addonEl = document.getElementById(`addon-${p.id}`);
+                if (qtyEl && addonEl) {
+                    tempOrderData.items[p.id] = {
+                        qty: qtyEl.value,
+                        addon: addonEl.checked
+                    };
+                }
+            });
+            
             closeOrderModal();
             openProductModal();
         }
@@ -556,6 +579,25 @@
             closeProductModal();
             const orderId = state.editingOrderId;
             openOrderModal(orderId);
+            
+            // 恢復保存的訂單表單數據
+            if (tempOrderData) {
+                document.getElementById('form-name').value = tempOrderData.name;
+                document.getElementById('form-phone').value = tempOrderData.phone;
+                document.getElementById('form-note').value = tempOrderData.note;
+                
+                // 恢復每個商品的數量和加購狀態
+                Object.keys(tempOrderData.items).forEach(productId => {
+                    const data = tempOrderData.items[productId];
+                    const qtyEl = document.getElementById(`qty-${productId}`);
+                    const addonEl = document.getElementById(`addon-${productId}`);
+                    if (qtyEl) qtyEl.value = data.qty;
+                    if (addonEl) addonEl.checked = data.addon;
+                });
+                
+                calcFormTotal();
+                tempOrderData = null;
+            }
         }
 
         // --- 表單邏輯 ---
