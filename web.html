@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>年菜訂單統計系統</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #f8fafc; }
+        .safe-area-bottom { padding-bottom: env(safe-area-inset-bottom); }
+        .active-tab { color: #ef4444; border-top: 3px solid #ef4444; }
+        input, select { font-size: 16px !important; } /* 防止 iOS 自動放大 */
+        .btn-press:active { transform: scale(0.95); }
+    </style>
+</head>
+<body class="pb-24">
+
+    <!-- Header -->
+    <header class="bg-red-600 text-white p-4 shadow-md sticky top-0 z-50">
+        <div class="flex justify-between items-center">
+            <h1 class="text-xl font-black tracking-wider"><i class="fa-solid fa-fire-burner mr-2"></i>熱炒店年菜統計</h1>
+            <span id="currentDate" class="text-sm font-bold bg-red-700 px-2 py-1 rounded"></span>
+        </div>
+    </header>
+
+    <!-- Main Content Containers -->
+    <main class="p-4 max-w-xl mx-auto">
+        
+        <!-- 1. SUMMARY 模組 (統計面板) -->
+        <section id="tab-summary" class="tab-content">
+            <h2 class="text-2xl font-bold mb-4 text-gray-800">📊 即時統計面板</h2>
+            
+            <!-- 金額總結 -->
+            <div class="grid grid-cols-2 gap-3 mb-6">
+                <div class="bg-white p-4 rounded-2xl shadow-sm border-l-4 border-green-500">
+                    <p class="text-xs text-gray-500 font-bold">今日營收 (已取)</p>
+                    <p class="text-xl font-black text-green-600" id="stat-picked-revenue">$0</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border-l-4 border-blue-500">
+                    <p class="text-xs text-gray-500 font-bold">總預訂額</p>
+                    <p class="text-xl font-black text-blue-600" id="stat-total-revenue">$0</p>
+                </div>
+            </div>
+
+            <!-- 商品統計清單 -->
+            <div id="summary-list" class="space-y-4">
+                <!-- 統計卡片由 JS 生成 -->
+            </div>
+
+            <div class="mt-8 space-y-3">
+                <button onclick="exportCSV()" class="w-full bg-slate-800 text-white font-bold py-3 rounded-xl shadow-lg btn-press">
+                    <i class="fa-solid fa-file-csv mr-2"></i>匯出當日報表 (CSV)
+                </button>
+            </div>
+        </section>
+
+        <!-- 2. ORDERS 模組 (訂單管理) -->
+        <section id="tab-orders" class="tab-content hidden">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold text-gray-800">📋 訂單清單</h2>
+                <button onclick="openOrderModal()" class="bg-red-500 text-white px-4 py-2 rounded-full font-bold shadow-lg btn-press">
+                    <i class="fa-solid fa-plus mr-1"></i> 新增訂單
+                </button>
+            </div>
+
+            <div class="mb-4">
+                <input type="text" id="orderSearch" oninput="renderOrders()" placeholder="搜尋姓名或電話..." class="w-full p-4 rounded-xl border-2 border-gray-200 focus:border-red-500 outline-none shadow-sm">
+            </div>
+
+            <div id="orders-list" class="space-y-3">
+                <!-- 訂單卡片由 JS 生成 -->
+            </div>
+        </section>
+
+        <!-- 3. PICKUP 模組 (取餐模式) -->
+        <section id="tab-pickup" class="tab-content hidden">
+            <h2 class="text-2xl font-bold mb-4 text-gray-800">🛍️ 現場取餐區</h2>
+            <div class="bg-orange-100 text-orange-800 p-3 rounded-lg mb-4 text-sm font-bold">
+                💡 僅顯示尚未取餐的訂單，點擊大按鈕完成取餐。
+            </div>
+            <div id="pickup-list" class="space-y-4">
+                <!-- 取餐卡片由 JS 生成 -->
+            </div>
+        </section>
+
+        <!-- 4. SETTINGS 模組 (商品管理) -->
+        <section id="tab-settings" class="tab-content hidden">
+            <h2 class="text-2xl font-bold mb-4 text-gray-800">⚙️ 商品與系統設定</h2>
+            
+            <div id="settings-list" class="space-y-3 mb-6">
+                <!-- 商品編輯由 JS 生成 -->
+            </div>
+
+            <button onclick="resetSystem()" class="w-full border-2 border-red-200 text-red-500 font-bold py-3 rounded-xl mt-10">
+                <i class="fa-solid fa-trash-can mr-2"></i>清空所有資料 (慎用)
+            </button>
+        </section>
+
+    </main>
+
+    <!-- Navigation Bar -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] z-50">
+        <div class="flex justify-around items-center safe-area-bottom">
+            <button onclick="switchTab('summary')" class="tab-btn p-3 flex flex-col items-center flex-1 active-tab" id="btn-summary">
+                <i class="fa-solid fa-chart-pie text-xl"></i>
+                <span class="text-[10px] font-bold mt-1">統計</span>
+            </button>
+            <button onclick="switchTab('orders')" class="tab-btn p-3 flex flex-col items-center flex-1 text-gray-400" id="btn-orders">
+                <i class="fa-solid fa-list-ul text-xl"></i>
+                <span class="text-[10px] font-bold mt-1">訂單</span>
+            </button>
+            <button onclick="switchTab('pickup')" class="tab-btn p-3 flex flex-col items-center flex-1 text-gray-400" id="btn-pickup">
+                <i class="fa-solid fa-truck-ramp-box text-xl"></i>
+                <span class="text-[10px] font-bold mt-1">取餐</span>
+            </button>
+            <button onclick="switchTab('settings')" class="tab-btn p-3 flex flex-col items-center flex-1 text-gray-400" id="btn-settings">
+                <i class="fa-solid fa-gears text-xl"></i>
+                <span class="text-[10px] font-bold mt-1">設定</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Order Modal (新增/編輯) -->
+    <div id="orderModal" class="fixed inset-0 bg-black/50 z-[60] hidden flex items-end sm:items-center justify-center">
+        <div class="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl p-6 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h3 id="modalTitle" class="text-xl font-black">新增年菜訂單</h3>
+                <button onclick="closeOrderModal()" class="text-gray-400 text-2xl"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1">客戶姓名</label>
+                    <input type="text" id="form-name" class="w-full p-3 bg-gray-100 rounded-xl outline-none focus:ring-2 ring-red-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1">聯絡電話</label>
+                    <input type="tel" id="form-phone" class="w-full p-3 bg-gray-100 rounded-xl outline-none focus:ring-2 ring-red-500">
+                </div>
+                
+                <hr>
+                
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-3">選購品項</label>
+                    <div id="form-items" class="space-y-3">
+                        <!-- 商品選擇由 JS 動態生成 -->
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1">備註</label>
+                    <textarea id="form-note" rows="2" class="w-full p-3 bg-gray-100 rounded-xl outline-none focus:ring-2 ring-red-500"></textarea>
+                </div>
+
+                <div class="pt-4">
+                    <div class="flex justify-between items-center mb-4">
+                        <span class="text-lg font-bold">總金額</span>
+                        <span id="form-total" class="text-2xl font-black text-red-600">$0</span>
+                    </div>
+                    <button onclick="saveOrder()" class="w-full bg-red-600 text-white font-black py-4 rounded-2xl shadow-xl btn-press text-lg">
+                        確認儲存訂單
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 初始資料與常數 ---
+        const DEFAULT_PRODUCTS = [
+            { id: 'p1', name: '砂鍋魚頭', price: 950, hasAddon: true, addonName: '加購鍋子', addonPrice: 200, isCore: true, reserved: 0, extra: 0 },
+            { id: 'p2', name: '佛跳牆', price: 1200, hasAddon: true, addonName: '加購甕', addonPrice: 200, isCore: true, reserved: 0, extra: 0 },
+            { id: 'p3', name: '筍絲蹄髈', price: 900, hasAddon: false, isCore: true, reserved: 0, extra: 0 },
+            { id: 'p4', name: '蒲燒鰻米糕', price: 780, hasAddon: false, isCore: true, reserved: 0, extra: 0 },
+            { id: 'p5', name: '胡椒豬肚雞', price: 880, hasAddon: false, isCore: true, reserved: 0, extra: 0 }
+        ];
+
+        let state = {
+            products: JSON.parse(localStorage.getItem('fry_products')) || DEFAULT_PRODUCTS,
+            orders: JSON.parse(localStorage.getItem('fry_orders')) || [],
+            editingOrderId: null
+        };
+
+        function saveData() {
+            localStorage.setItem('fry_products', JSON.stringify(state.products));
+            localStorage.setItem('fry_orders', JSON.stringify(state.orders));
+            renderAll();
+        }
+
+        // --- Tab 切換 ---
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active-tab', 'text-gray-400'));
+            
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+            document.getElementById(`btn-${tabId}`).classList.add('active-tab');
+            document.querySelectorAll('.tab-btn').forEach(b => {
+                if(!b.classList.contains('active-tab')) b.classList.add('text-gray-400');
+            });
+        }
+
+        // --- 核心邏輯：統計面板 ---
+        function renderSummary() {
+            const list = document.getElementById('summary-list');
+            list.innerHTML = '';
+            
+            let totalRevenue = 0;
+            let pickedRevenue = 0;
+
+            state.products.filter(p => p.isCore).forEach(product => {
+                // 統計預訂數
+                let bookedQty = 0;
+                let pickedQty = 0;
+
+                state.orders.forEach(order => {
+                    order.items.forEach(item => {
+                        if (item.productId === product.id) {
+                            bookedQty += item.qty;
+                            if (order.isPickedUp) pickedQty += item.qty;
+                        }
+                    });
+                });
+
+                const totalPrepared = bookedQty;
+                const available = totalPrepared - (parseInt(product.reserved) || 0);
+                const remaining = available - pickedQty;
+
+                // 顏色邏輯
+                let colorClass = "text-green-600 bg-green-50";
+                if (remaining <= 0) colorClass = "text-red-600 bg-red-50";
+                else if (remaining <= 5) colorClass = "text-orange-600 bg-orange-50";
+
+                const card = document.createElement('div');
+                card.className = "bg-white p-5 rounded-2xl shadow-sm border border-gray-100";
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="text-xl font-black text-gray-800">${product.name}</h3>
+                        <div class="px-3 py-1 rounded-full font-black ${colorClass}">
+                            剩餘: ${remaining}
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 text-center">
+                        <div class="bg-slate-50 p-2 rounded-lg">
+                            <p class="text-[10px] text-gray-400 font-bold uppercase">預訂</p>
+                            <p class="text-lg font-bold">${bookedQty}</p>
+                        </div>
+                        <div class="bg-purple-50 p-2 rounded-lg">
+                            <p class="text-[10px] text-purple-400 font-bold uppercase">預留</p>
+                            <input type="number" value="${product.reserved}" onchange="updateProdStock('${product.id}', 'reserved', this.value)" 
+                                class="w-full bg-transparent text-center text-lg font-bold outline-none">
+                        </div>
+                        <div class="bg-orange-50 p-2 rounded-lg">
+                            <p class="text-[10px] text-orange-400 font-bold uppercase">已取</p>
+                            <p class="text-lg font-bold">${pickedQty}</p>
+                        </div>
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+
+            // 計算營業額
+            state.orders.forEach(o => {
+                totalRevenue += o.total;
+                if (o.isPickedUp) pickedRevenue += o.total;
+            });
+
+            document.getElementById('stat-total-revenue').innerText = `$${totalRevenue.toLocaleString()}`;
+            document.getElementById('stat-picked-revenue').innerText = `$${pickedRevenue.toLocaleString()}`;
+        }
+
+        function updateProdStock(id, field, val) {
+            const idx = state.products.findIndex(p => p.id === id);
+            state.products[idx][field] = parseInt(val) || 0;
+            saveData();
+        }
+
+        // --- 訂單管理 ---
+        function renderOrders() {
+            const list = document.getElementById('orders-list');
+            const search = document.getElementById('orderSearch').value.toLowerCase();
+            list.innerHTML = '';
+
+            state.orders.filter(o => 
+                o.customerName.toLowerCase().includes(search) || 
+                o.phone.includes(search)
+            ).sort((a,b) => b.timestamp - a.timestamp).forEach(order => {
+                const card = document.createElement('div');
+                card.className = `p-4 rounded-2xl shadow-sm border-2 ${order.isPickedUp ? 'bg-gray-50 border-gray-100' : 'bg-white border-white'}`;
+                card.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="font-black text-lg">${order.customerName}</span>
+                                ${order.isPickedUp ? '<span class="bg-green-500 text-white text-[10px] px-2 py-0.5 rounded-full">已取餐</span>' : ''}
+                            </div>
+                            <p class="text-sm text-gray-500">${order.phone}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="font-black text-red-600 text-lg">$${order.total}</p>
+                        </div>
+                    </div>
+                    <div class="mt-2 text-sm text-gray-600">
+                        ${order.items.map(i => `${getProductName(i.productId)} x${i.qty}${i.withAddon ? '(加購)' : ''}`).join(', ')}
+                    </div>
+                    <div class="mt-4 flex gap-2">
+                        <button onclick="togglePickup('${order.id}')" class="flex-1 py-2 rounded-lg font-bold text-sm ${order.isPickedUp ? 'bg-gray-200 text-gray-600' : 'bg-green-100 text-green-700'}">
+                            ${order.isPickedUp ? '取消取餐' : '標記取餐'}
+                        </button>
+                        <button onclick="editOrder('${order.id}')" class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-sm font-bold"><i class="fa-solid fa-pen"></i></button>
+                        <button onclick="deleteOrder('${order.id}')" class="px-4 py-2 bg-red-50 text-red-400 rounded-lg text-sm font-bold"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        // --- 取餐模式 ---
+        function renderPickup() {
+            const list = document.getElementById('pickup-list');
+            list.innerHTML = '';
+
+            const pending = state.orders.filter(o => !o.isPickedUp);
+            if(pending.length === 0) {
+                list.innerHTML = '<div class="text-center py-20 text-gray-400 font-bold">目前沒有待取餐訂單</div>';
+                return;
+            }
+
+            pending.forEach(order => {
+                const card = document.createElement('div');
+                card.className = "bg-white p-5 rounded-3xl shadow-md border-b-4 border-orange-400";
+                card.innerHTML = `
+                    <div class="flex justify-between items-center mb-3">
+                        <div>
+                            <p class="text-2xl font-black text-gray-800">${order.customerName}</p>
+                            <p class="text-gray-500 font-bold">${order.phone}</p>
+                        </div>
+                        <p class="text-2xl font-black text-red-600">$${order.total}</p>
+                    </div>
+                    <div class="bg-gray-50 p-3 rounded-xl mb-4 text-gray-700">
+                        ${order.items.map(i => `<div class="flex justify-between"><span>${getProductName(i.productId)}${i.withAddon ? ' (含加購)' : ''}</span><span class="font-black">x${i.qty}</span></div>`).join('')}
+                    </div>
+                    <button onclick="togglePickup('${order.id}')" class="w-full bg-orange-500 text-white py-5 rounded-2xl text-xl font-black shadow-lg btn-press">
+                        <i class="fa-solid fa-check-circle mr-2"></i> 確認取餐
+                    </button>
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        // --- 商品設定 ---
+        function renderSettings() {
+            const list = document.getElementById('settings-list');
+            list.innerHTML = '';
+
+            state.products.forEach(p => {
+                const div = document.createElement('div');
+                div.className = "bg-white p-4 rounded-xl border border-gray-200 flex justify-between items-center";
+                div.innerHTML = `
+                    <div>
+                        <p class="font-bold">${p.name}</p>
+                        <p class="text-xs text-gray-400">$${p.price} ${p.hasAddon ? `| ${p.addonName} +$${p.addonPrice}` : ''}</p>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <label class="flex items-center cursor-pointer">
+                            <span class="mr-2 text-xs font-bold text-gray-500">主面板統計</span>
+                            <input type="checkbox" ${p.isCore ? 'checked' : ''} onchange="toggleProdCore('${p.id}')" class="w-5 h-5 accent-red-500">
+                        </label>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function toggleProdCore(id) {
+            const idx = state.products.findIndex(p => p.id === id);
+            state.products[idx].isCore = !state.products[idx].isCore;
+            saveData();
+        }
+
+        // --- 表單邏輯 ---
+        function openOrderModal(orderId = null) {
+            state.editingOrderId = orderId;
+            const modal = document.getElementById('orderModal');
+            const itemsDiv = document.getElementById('form-items');
+            modal.classList.remove('hidden');
+            
+            itemsDiv.innerHTML = '';
+            state.products.forEach(p => {
+                const div = document.createElement('div');
+                div.className = "bg-gray-50 p-3 rounded-xl flex flex-col gap-2";
+                div.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold">${p.name} ($${p.price})</span>
+                        <div class="flex items-center gap-3">
+                            <button onclick="updateFormQty('${p.id}', -1)" class="w-8 h-8 bg-white rounded-full shadow-sm text-gray-500 font-bold">-</button>
+                            <span id="qty-${p.id}" class="w-6 text-center font-black">0</span>
+                            <button onclick="updateFormQty('${p.id}', 1)" class="w-8 h-8 bg-white rounded-full shadow-sm text-red-500 font-bold">+</button>
+                        </div>
+                    </div>
+                    ${p.hasAddon ? `
+                        <label class="flex items-center text-sm text-gray-600 bg-white p-2 rounded-lg border border-dashed border-gray-300">
+                            <input type="checkbox" id="addon-${p.id}" onchange="calcFormTotal()" class="mr-2 w-4 h-4 accent-red-500">
+                            ${p.addonName} (+$${p.addonPrice})
+                        </label>
+                    ` : ''}
+                `;
+                itemsDiv.appendChild(div);
+            });
+
+            if (orderId) {
+                const order = state.orders.find(o => o.id === orderId);
+                document.getElementById('modalTitle').innerText = '編輯訂單';
+                document.getElementById('form-name').value = order.customerName;
+                document.getElementById('form-phone').value = order.phone;
+                document.getElementById('form-note').value = order.note;
+                order.items.forEach(item => {
+                    const qtyEl = document.getElementById(`qty-${item.productId}`);
+                    if(qtyEl) qtyEl.innerText = item.qty;
+                    const addonEl = document.getElementById(`addon-${item.productId}`);
+                    if(addonEl) addonEl.checked = item.withAddon;
+                });
+            } else {
+                document.getElementById('modalTitle').innerText = '新增年菜訂單';
+                document.getElementById('form-name').value = '';
+                document.getElementById('form-phone').value = '';
+                document.getElementById('form-note').value = '';
+            }
+            calcFormTotal();
+        }
+
+        function closeOrderModal() {
+            document.getElementById('orderModal').classList.add('hidden');
+        }
+
+        function updateFormQty(pId, change) {
+            const el = document.getElementById(`qty-${pId}`);
+            let val = parseInt(el.innerText) + change;
+            if(val < 0) val = 0;
+            el.innerText = val;
+            calcFormTotal();
+        }
+
+        function calcFormTotal() {
+            let total = 0;
+            state.products.forEach(p => {
+                const qty = parseInt(document.getElementById(`qty-${p.id}`).innerText);
+                if (qty > 0) {
+                    total += qty * p.price;
+                    const addonEl = document.getElementById(`addon-${p.id}`);
+                    if (addonEl && addonEl.checked) {
+                        total += qty * p.addonPrice;
+                    }
+                }
+            });
+            document.getElementById('form-total').innerText = `$${total}`;
+        }
+
+        function saveOrder() {
+            const name = document.getElementById('form-name').value;
+            const phone = document.getElementById('form-phone').value;
+            if(!name || !phone) return alert('請填寫姓名與電話');
+
+            const items = [];
+            state.products.forEach(p => {
+                const qty = parseInt(document.getElementById(`qty-${p.id}`).innerText);
+                if (qty > 0) {
+                    items.push({
+                        productId: p.id,
+                        qty: qty,
+                        withAddon: document.getElementById(`addon-${p.id}`)?.checked || false
+                    });
+                }
+            });
+
+            if(items.length === 0) return alert('請至少選擇一項商品');
+
+            const total = parseInt(document.getElementById('form-total').innerText.replace('$', ''));
+
+            if (state.editingOrderId) {
+                const idx = state.orders.findIndex(o => o.id === state.editingOrderId);
+                state.orders[idx] = { ...state.orders[idx], customerName: name, phone, items, note: document.getElementById('form-note').value, total };
+            } else {
+                state.orders.push({
+                    id: Date.now().toString(),
+                    customerName: name,
+                    phone: phone,
+                    items: items,
+                    note: document.getElementById('form-note').value,
+                    total: total,
+                    isPickedUp: false,
+                    timestamp: Date.now()
+                });
+            }
+
+            saveData();
+            closeOrderModal();
+        }
+
+        // --- 工具功能 ---
+        function getProductName(id) {
+            return state.products.find(p => p.id === id)?.name || '未知商品';
+        }
+
+        function togglePickup(id) {
+            const idx = state.orders.findIndex(o => o.id === id);
+            state.orders[idx].isPickedUp = !state.orders[idx].isPickedUp;
+            saveData();
+        }
+
+        function deleteOrder(id) {
+            if(confirm('確定要刪除這筆訂單嗎？')) {
+                state.orders = state.orders.filter(o => o.id !== id);
+                saveData();
+            }
+        }
+
+        function resetSystem() {
+            if(confirm('此動作將刪除所有訂單且無法復原，確定嗎？')) {
+                state.orders = [];
+                saveData();
+            }
+        }
+
+        function exportCSV() {
+            let csv = "品項,預訂數,預留,已取餐,剩餘\n";
+            state.products.filter(p => p.isCore).forEach(product => {
+                let bookedQty = 0;
+                let pickedQty = 0;
+                state.orders.forEach(order => {
+                    order.items.forEach(item => {
+                        if (item.productId === product.id) {
+                            bookedQty += item.qty;
+                            if (order.isPickedUp) pickedQty += item.qty;
+                        }
+                    });
+                });
+                const remaining = bookedQty - (product.reserved) - pickedQty;
+                csv += `${product.name},${bookedQty},${product.reserved},${pickedQty},${remaining}\n`;
+            });
+
+            const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.setAttribute("download", `年菜統計報表_${new Date().toLocaleDateString()}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function renderAll() {
+            renderSummary();
+            renderOrders();
+            renderPickup();
+            renderSettings();
+        }
+
+        // --- 初始化 ---
+        document.getElementById('currentDate').innerText = new Date().toLocaleDateString();
+        renderAll();
+    </script>
+</body>
+</html>
