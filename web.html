@@ -609,6 +609,10 @@
             calcFormTotal();
         }
 
+        function closeOrderModal() {
+            document.getElementById('orderModal').classList.add('hidden');
+        }
+
         function updateFormQty(pId, change) {
             const el = document.getElementById(`qty-${pId}`);
             let val = parseInt(el.value) + change;
