@@ -1,14 +1,20 @@
-<!-- Updated Validation in web.html -->
-<script>
-function validateOrder() {
-    var name = document.getElementById('name').value;
-    var phone = document.getElementById('phone').value;
-    
-    // Require at least one of the fields to be filled
-    if (name.trim() === '' && phone.trim() === '') {
-        alert('Please enter either your name or phone number to place an order.');
-        return false;
-    }
-    return true;
-}
-</script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Year Dishes</title>
+</head>
+<body>
+    <!-- Other content -->
+    <script>
+        function validateForm() {
+            var name = document.getElementById('name').value;
+            var phone = document.getElementById('phone').value;
+            // Updated line
+            if(!name && !phone) return alert('請至少填寫姓名或電話');
+            // Other validation code...
+        }
+    </script>
+</body>
+</html>
