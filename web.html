@@ -768,6 +768,7 @@
         }
 
         function exportCSV() {
+            // first section: product summary
             let csv = "品項,預訂數,預留,已取餐,剩餘\n";
             state.products.filter(p => p.isCore).forEach(product => {
                 let bookedQty = 0;
@@ -782,6 +783,14 @@
                 });
                 const remaining = bookedQty + product.reserved - pickedQty;
                 csv += `${product.name},${bookedQty},${product.reserved},${pickedQty},${remaining}\n`;
+            });
+            
+            // second section: detailed orders with pickup times
+            csv += "\n訂單ID,客戶姓名,電話,總金額,取餐時間,狀態\n";
+            state.orders.forEach(order => {
+                const time = order.pickedTime ? new Date(order.pickedTime).toLocaleString() : '';
+                const status = order.isPickedUp ? '已取餐' : '未取';
+                csv += `${order.id},${order.customerName || ''},${order.phone || ''},${order.total},${time},${status}\n`;
             });
 
             const blob = new Blob(["\ufeff" + csv], { type: 'text/csv;charset=utf-8;' });
