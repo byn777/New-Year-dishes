@@ -348,7 +348,12 @@
             state.orders.filter(o => 
                 o.customerName.toLowerCase().includes(search) || 
                 o.phone.includes(search)
-            ).sort((a,b) => b.timestamp - a.timestamp).forEach(order => {
+            ).sort((a,b) => {
+                // sort by created time or pickedTime if picked
+                const ta = a.isPickedUp ? (a.pickedTime || a.timestamp) : a.timestamp;
+                const tb = b.isPickedUp ? (b.pickedTime || b.timestamp) : b.timestamp;
+                return tb - ta;
+            }).forEach(order => {
                 const card = document.createElement('div');
                 card.className = `p-4 rounded-2xl shadow-sm border-2 ${order.isPickedUp ? 'bg-gray-50 border-gray-100' : 'bg-white border-white'}`;
                 card.innerHTML = `
@@ -363,6 +368,7 @@
                         <div class="text-right">
                             <p class="font-black text-red-600 text-lg">$${order.total}</p>
                         </div>
+                    ${order.isPickedUp ? `<div class="text-xs text-gray-500 mt-1">取餐時間：${order.pickedTime ? new Date(order.pickedTime).toLocaleString() : ''}</div>` : ''}
                     </div>
                     <div class="mt-2 text-sm text-gray-600">
                         ${order.items.map(i => `${getProductName(i.productId)} x${i.qty}${i.withAddon ? '(加購)' : ''}`).join(', ')}
@@ -702,7 +708,9 @@
 
             if (state.editingOrderId) {
                 const idx = state.orders.findIndex(o => o.id === state.editingOrderId);
-                state.orders[idx] = { ...state.orders[idx], customerName: name, phone, items, note: document.getElementById('form-note').value, total };
+                // preserve any existing pickedTime when editing
+                const existing = state.orders[idx];
+                state.orders[idx] = { ...existing, customerName: name, phone, items, note: document.getElementById('form-note').value, total };
             } else {
                 state.orders.push({
                     id: Date.now().toString(),
@@ -712,6 +720,7 @@
                     note: document.getElementById('form-note').value,
                     total: total,
                     isPickedUp: false,
+                    pickedTime: null,
                     timestamp: Date.now()
                 });
             }
@@ -731,7 +740,16 @@
 
         function togglePickup(id) {
             const idx = state.orders.findIndex(o => o.id === id);
-            state.orders[idx].isPickedUp = !state.orders[idx].isPickedUp;
+            const order = state.orders[idx];
+            if (!order.isPickedUp) {
+                // marking as picked up
+                order.isPickedUp = true;
+                order.pickedTime = Date.now();
+            } else {
+                // un-marked, clear timestamp
+                order.isPickedUp = false;
+                order.pickedTime = null;
+            }
             saveData();
         }
 
